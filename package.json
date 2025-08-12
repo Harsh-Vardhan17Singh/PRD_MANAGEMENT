@@ -1,0 +1,21 @@
+{
+  "name": "prd_management",
+  "version": "1.0.0",
+  "description": "A Project Application For Learning",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "harsh": "node index.js"
+  },
+  "keywords": [
+    "Learning",
+    "Backend",
+    "API",
+    "Creation"
+  ],
+  "author": "Harsh Vardhan Singh",
+  "license": "ISC",
+  "devDependencies": {
+    "prettier": "3.6.2"
+  }
+}
