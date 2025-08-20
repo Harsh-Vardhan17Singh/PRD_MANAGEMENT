@@ -5,7 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "harsh": "node index.js"
+    "harsh": "nodemon src/index.js",
+    "start": "node src/index.js"
   },
   "keywords": [
     "Learning",
@@ -16,6 +17,20 @@
   "author": "Harsh Vardhan Singh",
   "license": "ISC",
   "devDependencies": {
+    "nodemon": "^3.1.10",
     "prettier": "3.6.2"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "cookies-parser": "^1.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "express-validator": "^7.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "mailgen": "^2.0.29",
+    "mongoose": "^8.17.1",
+    "nodemailer": "^7.0.5"
   }
 }
