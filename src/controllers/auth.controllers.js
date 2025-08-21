@@ -4,7 +4,7 @@ import { User } from "../models/user.models.js"
 import { ApiResponse } from "../utils/api-response.js"
 import {ApiError} from "../utils/api-error.js"
 import { asynchandler } from "../utils/async-handlers.js"
-import { emailVerificationMailContent, sendEmail } from "../utils/mail.js"
+import { emailVerificationMailContent, forgotpasswordMailContent, sendEmail } from "../utils/mail.js"
 import jwt from "jsonwebtoken"
 //import { sendEmail } from "../utils/mail.js" 
 
@@ -215,7 +215,7 @@ const resendEmailVerification = asynchandler(async(req,res) =>{
    const user = await User.findById(req.user?._id)
 
    //req.user?._id in javascript safely checks:
-     //1) if req.user exists retuen req.user._id
+     //1) if req.user exists return req.user._id
      //2) if req.user doesn't exists return undefined
 
      if(!user){
@@ -253,22 +253,36 @@ const resendEmailVerification = asynchandler(async(req,res) =>{
 
 })
 
-
+// I define a function refreshAccessToken Wrapped with asynchandler.
+/*
+Purpose:Refresh the access token when it expires using a valid refresh token
+Extracts the refresh token from either
+  1)(req.cookies.refreshToken )-> if stored as an HTTP only cookie
+  2)(req.body.refreshToken) -> if sent in the request body
+ */
 const refreshAccessToken = asynchandler(async(req,res) =>{
    const incomingrefreshToken = req.cookies.refreshToken ||  req.body.refreshToken
 
+// if no refreshToken is found throw 401 Error, this means the client isn't allowed to request a new access token
    if(!incomingrefreshToken){
       throw new ApiError(401,"Unauthorise Access")
    }
+
+   // verifies JWT token , process.env.REFRESH_TOKEN_SECRET is the secret key used to sign refresh tokens.
+
    try {
       const decodedToken = jwt.verify(incomingrefreshToken, process.env.REFRESH_TOKEN_SECRET)
+     
+     // find the user from database using the user._id stored inside the refresh token.
+     //  decodedToken?._id -> optional chaining ensures no error if decodedToken is null 
 
       const user = await User.findById(decodedToken?._id)
       
+      // if user is not found
       if(!user){
          throw new ApiError(401,"Invalid refresh token")
       }
-
+// if the incoming refresh token is not equal to the  refreshtoken token of the user then throw an error
       if(incomingrefreshToken !== user?.refreshToken){
          throw  new ApiError(401,"Refresh Token is Expired")
 
@@ -277,7 +291,7 @@ const refreshAccessToken = asynchandler(async(req,res) =>{
          httpOnly:true,
          secure:true
       }
-
+      // renames refreshToken to newrefreshToken to avoid overwriting
       const {accessToken , refreshToken:newRefreshToken} = await generateAccessAndRefreshTokens(user._id)
 
       user.refreshToken = newRefreshToken
@@ -291,7 +305,7 @@ const refreshAccessToken = asynchandler(async(req,res) =>{
          new ApiResponse
          (
             200,
-         {accessToken,refreshToken:newRefreshToken},
+         {accessToken,refreshToken:newRefreshToken}, 
          "Access Token refreshed"
       )
         )
@@ -299,8 +313,131 @@ const refreshAccessToken = asynchandler(async(req,res) =>{
       throw new ApiError(401,"Invalid Refresh Token")
    }
 })
+/* 
+ SUMMARY OF  refreshAccessToken
+
+ 1) Takes in the refresh token
+ 2)Validates it with JWT
+ 3)Ensures it matches the DB version.
+ 4)Generates new access + refresh tokens.
+ 5)Stores them securely(DB + cookies).
+ 6) Returns them to the client
+
+*/
+
+//creating a forgot password in Application
+
+const forgotPasswordRequest = asynchandler(async(req,res) =>{
+   const {email} = req.body
+
+   const user = await User.findOne({email})
+
+   if(!user){
+      throw new ApiError(404,"User does not exist in database",[])
+   }
+   const {unHasedToken,hashedToken,TokenExpiry} = user.generateTemporaryToken()
+
+   user.forgotpasswordToken = hashedToken
+   user.forgotPasswordExpiry = TokenExpiry
+   await user.save({validateBeforeSave:false})
+
+   await sendEmail({
+     email:user?.email,
+     subject:"Password reset request",
+     mailgenContent: forgotpasswordMailContent(
+      user.username,
+      `${process.env.FORGOT_PASSWORD_REDIRECT_URL}/${unHasedToken}`
+     ) 
+   })
+
+   return res
+     .status(200)
+     .json(
+      new ApiResponse(
+         200,
+         {},
+         "Password reset mail has been sent on your mail id"
+      )
+     )
 
 
 
 
-export{registerUser, login,logoutUser, getCurrentUser,VerifyEmail,resendEmailVerification}
+
+
+})
+const resetForgotPassword = asynchandler(async(req,res) =>{
+
+   const {refreshToken} = req.params
+   const {newPassword} = req.body
+
+   let hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex")
+
+
+      const user = await User.findOne({
+         forgotpasswordToken:hashedToken,
+         forgotPasswordExpiry:{$gt:Date.now()}
+      })
+
+      if(!user){
+         throw new ApiError(489,"Token is invalid or expired")
+
+      }
+
+      user.forgotPasswordExpiry = undefined
+      user.forgotpasswordToken = undefined
+
+      user.password = newPassword
+      await user.save({validateBeforeSave:false})
+
+      return res  
+         .status(200)
+         .json(
+            new ApiResponse(
+               200,
+               {},
+               "Passowrd reset succesfully"
+            )
+         )
+
+
+})
+
+const changeCurrentPassword = asynchandler(async(req,res) =>{
+
+   const {oldPassword, newPassword} = req.body
+
+   const user = await User.findById(req.user?._id)
+
+  const isPasswordValid =  await user.isPasswordCorrect(oldPassword)
+
+  if(!isPasswordValid){
+   throw new ApiError(400,"Invalid old Password")
+  }
+
+  user.password = newPassword
+  await user.save({validateBeforeSave:false})
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+         200,
+         {},
+         "Password changed Successfully"
+      )
+    )
+
+
+
+})
+
+
+export{registerUser, login,logoutUser, getCurrentUser,VerifyEmail,resendEmailVerification,refreshAccessToken,
+forgotPasswordRequest,
+resetForgotPassword,
+changeCurrentPassword
+}

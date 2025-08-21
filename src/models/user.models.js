@@ -51,7 +51,7 @@ const userSchema = new Schema(
        refreshToken:{
         type:String
        },
-       forgotpassword:{
+       forgotpasswordToken:{
         type:String
        },
        forgotPasswordExpiry:{
